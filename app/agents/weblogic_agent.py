@@ -5,16 +5,13 @@ from typing import Any
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from google.adk.agents import LlmAgent
-from google.adk.models.lite_llm import LiteLlm
-from google.adk.runners import InMemoryRunner
-from google.genai import types
 
 from app.agents.weblogic_prompt import (
     PROJECT_ROOT,
     build_weblogic_message,
     load_weblogic_instruction,
 )
+from app.analysis.event_context import EventContext, validate_event_citations
 from app.analysis.finding_contract import (
     FindingProposal,
     validate_finding_context,
@@ -62,6 +59,7 @@ def parse_agent_response(
     *,
     resource_key: str,
     evidence: list[dict[str, Any]],
+    event_context: EventContext | None = None,
 ) -> FindingProposal:
     """Valida la estructura y las referencias del hallazgo propuesto."""
     try:
@@ -86,6 +84,7 @@ def parse_agent_response(
         evidence_periods=periods,
     )
 
+    validate_event_citations(proposal, event_context)
     return proposal
 
 
@@ -93,9 +92,19 @@ async def analyze_resource(
     resource_key: str,
     evidence: list[dict[str, Any]],
     configuration: AgentConfiguration,
+    *,
+    event_context: EventContext | None = None,
 ) -> FindingProposal:
     """Invoca al especialista para un recurso y valida su respuesta."""
-    message_text = build_weblogic_message(resource_key, evidence)
+    # Las dependencias ADK solo son necesarias al invocar el modelo.
+    from google.adk.agents import LlmAgent
+    from google.adk.models.lite_llm import LiteLlm
+    from google.adk.runners import InMemoryRunner
+    from google.genai import types
+
+    message_text = build_weblogic_message(
+        resource_key, evidence, event_context=event_context
+    )
 
     agent = LlmAgent(
         name=configuration.agent_name,
@@ -147,4 +156,5 @@ async def analyze_resource(
         response_text,
         resource_key=resource_key,
         evidence=evidence,
+        event_context=event_context,
     )

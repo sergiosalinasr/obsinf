@@ -30,6 +30,10 @@ class Finding(Base):
     __tablename__ = "findings"
 
     __table_args__ = (
+        CheckConstraint(
+            "jsonb_typeof(event_context) = 'object'",
+            name="event_context_object",
+        ),
         ForeignKeyConstraint(
             ["company_id", "execution_id"],
             ["analysis_executions.company_id", "analysis_executions.id"],
@@ -95,6 +99,11 @@ class Finding(Base):
         server_default=text("'[]'::jsonb"),
     )
 
+    # Copia de la selección que recibió el agente; {} para hallazgos anteriores.
+    event_context: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb")
+    )
+
     # Datos necesarios para saber cómo se produjo la interpretación.
     agent_name: Mapped[str] = mapped_column(Text)
     model_name: Mapped[str] = mapped_column(Text)
@@ -135,3 +144,33 @@ class FindingEvidence(Base):
     company_id: Mapped[int] = mapped_column(BigInteger)
     finding_id: Mapped[int] = mapped_column(BigInteger)
     evidence_id: Mapped[int] = mapped_column(BigInteger)
+
+
+class FindingEvent(Base):
+    """Eventos normalizados citados por el agente para sustentar el hallazgo."""
+
+    __tablename__ = "finding_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "finding_id"],
+            ["findings.company_id", "findings.id"],
+            name="fk_finding_events_company_finding",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "event_id"],
+            ["events_normalized.company_id", "events_normalized.id"],
+            name="fk_finding_events_company_event",
+        ),
+        UniqueConstraint(
+            "company_id", "finding_id", "event_id",
+            name="uq_finding_events_company_finding_event",
+        ),
+        Index("ix_finding_events_company_finding", "company_id", "finding_id"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=True), primary_key=True
+    )
+    company_id: Mapped[int] = mapped_column(BigInteger)
+    finding_id: Mapped[int] = mapped_column(BigInteger)
+    event_id: Mapped[int] = mapped_column(BigInteger)

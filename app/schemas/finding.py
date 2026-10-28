@@ -1,7 +1,7 @@
 """Respuestas públicas para la consulta de hallazgos persistidos."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,6 +38,8 @@ class FindingRead(BaseModel):
     prompt_sha256: str
     created_at: datetime
     evidence_ids: list[int]
+    event_ids: list[int]
+    event_context: dict[str, Any]
 
 
 class FindingPage(BaseModel):

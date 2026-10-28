@@ -3,12 +3,14 @@ import hashlib
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.analysis.event_context import EventContext, validate_event_citations
+from app.services.event_context import load_event_context
 from app.analysis.finding_contract import (
     FindingProposal,
     validate_finding_context,
 )
 from app.models.analysis import AnalysisExecution, Evidence
-from app.models.finding import Finding, FindingEvidence
+from app.models.finding import Finding, FindingEvidence, FindingEvent
 from app.models.source import Source
 from app.models.technology import Technology
 
@@ -32,6 +34,7 @@ def save_finding(
     agent_name: str,
     model_name: str,
     instruction: str,
+    event_context: EventContext | None = None,
 ) -> Finding:
     """Valida y guarda un hallazgo con sus evidencias.
 
@@ -141,6 +144,38 @@ def save_finding(
                 "El hallazgo no cubre el período de sus evidencias",
             ) from exc
 
+        # El modelo nunca decide qué eventos están autorizados. Se comprueba
+        # otra vez la selección completa contra BD antes de guardar referencias.
+        try:
+            validate_event_citations(proposal, event_context)
+            if event_context is not None:
+                if (
+                    event_context.company_id != company_id
+                    or event_context.execution_id != execution_id
+                    or event_context.source_id != source_id
+                    or event_context.resource_key != proposal.resource_key
+                ):
+                    raise ValueError("El contexto de eventos pertenece a otro análisis")
+                if not set(proposal.evidence_ids).issubset(
+                    {window.evidence_id for window in event_context.windows}
+                ):
+                    raise ValueError("Las evidencias no pertenecen al contexto de eventos")
+                refreshed = load_event_context(
+                    db,
+                    company_id=company_id, execution_id=execution_id,
+                    source_id=source_id, resource_key=proposal.resource_key,
+                    evidence_ids=[window.evidence_id for window in event_context.windows],
+                    margin_seconds=event_context.margin_seconds,
+                    event_limit=event_context.event_limit,
+                    max_message_chars=event_context.max_message_chars,
+                )
+                if refreshed.model_dump() != event_context.model_dump():
+                    raise ValueError("El contexto de eventos cambió desde la interpretación")
+        except ValueError as exc:
+            raise FindingPersistenceError(
+                "INVALID_EVENT_CONTEXT", str(exc)
+            ) from exc
+
         existing = db.scalar(
             select(Finding.id)
             .where(
@@ -179,6 +214,7 @@ def save_finding(
             agent_name=agent_name.strip(),
             model_name=model_name.strip(),
             prompt_sha256=prompt_sha256,
+            event_context=(event_context.model_dump(mode="json") if event_context else {}),
         )
         db.add(finding)
         db.flush()
@@ -188,6 +224,11 @@ def save_finding(
                 company_id=company_id,
                 finding_id=finding.id,
                 evidence_id=evidence_id,
+            ))
+
+        for event_id in proposal.event_ids:
+            db.add(FindingEvent(
+                company_id=company_id, finding_id=finding.id, event_id=event_id
             ))
 
         db.commit()

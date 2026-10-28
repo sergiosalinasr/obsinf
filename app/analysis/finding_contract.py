@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Annotated
 
 from pydantic import (
     AwareDatetime,
@@ -54,6 +55,10 @@ class FindingProposal(BaseModel):
 
     finding: str = Field(min_length=1, max_length=4000)
     evidence_ids: list[int] = Field(min_length=1, max_length=100)
+    # Solo referencias; la selección autorizada de eventos la realiza Python.
+    event_ids: list[Annotated[int, Field(strict=True, gt=0, le=9223372036854775807)]] = Field(
+        default_factory=list, max_length=100
+    )
     possible_implications: list[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("confidence", mode="before")
@@ -73,6 +78,13 @@ class FindingProposal(BaseModel):
         if len(value) != len(set(value)):
             raise ValueError("Los IDs de evidencia no pueden repetirse")
 
+        return value
+
+    @field_validator("event_ids")
+    @classmethod
+    def validate_event_ids(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("Los IDs de eventos no pueden repetirse")
         return value
 
     @field_validator("possible_implications")

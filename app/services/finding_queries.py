@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.company import Company
-from app.models.finding import Finding, FindingEvidence
+from app.models.finding import Finding, FindingEvidence, FindingEvent
 from app.schemas.finding import (
     FindingClassification,
     FindingRead,
@@ -31,7 +31,7 @@ def _require_company(db: Session, company_id: int) -> None:
 def _serialize_findings(
     db: Session, company_id: int, rows: list[Finding]
 ) -> list[FindingRead]:
-    """Carga las asociaciones en una consulta para evitar N+1 consultas."""
+    """Carga las asociaciones por lotes para evitar N+1 consultas."""
     if not rows:
         return []
 
@@ -47,15 +47,28 @@ def _serialize_findings(
     for finding_id, evidence_id in links:
         evidence_by_finding[finding_id].append(evidence_id)
 
+    event_by_finding: dict[int, list[int]] = {row.id: [] for row in rows}
+    event_links = db.execute(
+        select(FindingEvent.finding_id, FindingEvent.event_id)
+        .where(
+            FindingEvent.company_id == company_id,
+            FindingEvent.finding_id.in_(event_by_finding),
+        )
+        .order_by(FindingEvent.finding_id, FindingEvent.event_id)
+    ).all()
+    for finding_id, event_id in event_links:
+        event_by_finding[finding_id].append(event_id)
+
     return [
         FindingRead.model_validate({
             # Se exponen solamente los campos definidos en el contrato público.
             **{
                 name: getattr(row, name)
                 for name in FindingRead.model_fields
-                if name != "evidence_ids"
+                if name not in {"evidence_ids", "event_ids"}
             },
             "evidence_ids": evidence_by_finding[row.id],
+            "event_ids": event_by_finding[row.id],
         })
         for row in rows
     ]

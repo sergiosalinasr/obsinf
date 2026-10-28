@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from app.agents.weblogic_agent import AgentConfiguration
 from app.analysis.finding_contract import FindingProposal
+from app.analysis.event_context import EventContext, EventWindow
 from app.jobs import interpret_weblogic
 
 
@@ -46,6 +47,13 @@ def setup_fakes(monkeypatch):
         instruction="Prompt exacto de la prueba",
     )
     calls = []
+    event_context = EventContext(
+        company_id=1, execution_id=2, source_id=3, resource_key="ManagedServer1",
+        data_cutoff_at="2026-10-28T12:00:00Z", margin_seconds=120,
+        event_limit=100, max_message_chars=2000,
+        windows=(EventWindow(evidence_id=1, start="2026-10-27T12:00:00Z", end="2026-10-27T12:05:00Z"),),
+    )
+    monkeypatch.setattr(interpret_weblogic, "load_event_context", lambda *a, **k: event_context)
 
     monkeypatch.setattr(
         interpret_weblogic,
@@ -63,10 +71,13 @@ def setup_fakes(monkeypatch):
         FakeSession,
     )
 
-    async def fake_analyze(resource_key, items, config):
+    async def fake_analyze(resource_key, items, config, *, event_context):
         assert resource_key == "ManagedServer1"
         assert items == evidence()
         assert config is configuration
+        assert event_context.company_id == 1
+        assert event_context.execution_id == 2
+        assert event_context.source_id == 3
         return proposal()
 
     def fake_save(db, **kwargs):
@@ -114,6 +125,7 @@ def test_persist_passes_exact_agent_configuration(monkeypatch, capsys):
     assert calls[0]["model_name"] == configuration.model_name
     assert calls[0]["instruction"] == configuration.instruction
     assert calls[0]["proposal"].evidence_ids == [1]
+    assert calls[0]["event_context"].execution_id == 2
     assert "ID: 42" in capsys.readouterr().out
 
 

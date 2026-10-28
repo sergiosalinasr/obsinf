@@ -16,6 +16,7 @@ from app.models.analysis import AnalysisExecution, Evidence
 from app.models.source import Source
 from app.models.technology import Technology
 from app.services.findings import save_finding
+from app.services.event_context import load_event_context
 
 
 def load_evidence(
@@ -100,6 +101,8 @@ async def run(
     source_id: int,
     *,
     persist: bool = False,
+    event_margin_seconds: int = 120,
+    event_limit: int = 100,
 ) -> int:
     """Interpreta evidencias y, opcionalmente, guarda los hallazgos."""
     evidence, execution_status = load_evidence(
@@ -133,11 +136,28 @@ async def run(
             flush=True,
         )
 
+        # Se cierra la sesión antes de invocar al modelo. El servicio de
+        # persistencia volverá a verificar la selección contra PostgreSQL.
+        with SessionLocal() as db:
+            event_context = load_event_context(
+                db,
+                company_id=company_id, execution_id=execution_id,
+                source_id=source_id, resource_key=resource_key,
+                evidence_ids=[item["id"] for item in grouped[resource_key]],
+                margin_seconds=event_margin_seconds, event_limit=event_limit,
+            )
+        print(f"Eventos de contexto: {len(event_context.events)}")
+        if event_context.has_more_events:
+            print("Contexto limitado: hay eventos adicionales no enviados al agente.")
+        if any(event.message_truncated for event in event_context.events):
+            print("Contexto limitado: uno o más mensajes fueron recortados.")
+
         # La llamada al modelo ocurre sin mantener abierta una sesión de BD.
         proposal = await analyze_resource(
             resource_key,
             grouped[resource_key],
             configuration,
+            event_context=event_context,
         )
 
         print(json.dumps(
@@ -158,6 +178,7 @@ async def run(
                     agent_name=configuration.agent_name,
                     model_name=configuration.model_name,
                     instruction=configuration.instruction,
+                    event_context=event_context,
                 )
                 print(f"Hallazgo guardado con ID: {finding.id}")
 
@@ -179,10 +200,23 @@ def main() -> int:
         action="store_true",
         help="Guardar los hallazgos validados en PostgreSQL",
     )
+    parser.add_argument(
+        "--event-margin-seconds", type=int, default=120,
+        help="Margen antes y después de cada evidencia (0 a 3600 segundos)",
+    )
+    parser.add_argument(
+        "--event-limit", type=int, default=100,
+        help="Máximo de eventos por recurso enviados al agente (1 a 100)",
+    )
     args = parser.parse_args()
 
     if min(args.company_id, args.execution_id, args.source_id) <= 0:
         parser.error("Los identificadores deben ser positivos")
+
+    if not 0 <= args.event_margin_seconds <= 3600:
+        parser.error("El margen de eventos debe estar entre 0 y 3600")
+    if not 1 <= args.event_limit <= 100:
+        parser.error("El límite de eventos debe estar entre 1 y 100")
 
     settings = get_settings()
 
@@ -196,6 +230,8 @@ def main() -> int:
                 args.execution_id,
                 args.source_id,
                 persist=args.persist,
+                event_margin_seconds=args.event_margin_seconds,
+                event_limit=args.event_limit,
             )
         )
 
