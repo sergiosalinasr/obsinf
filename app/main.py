@@ -20,6 +20,7 @@ from app.api.v1.endpoints.metrics import router as metrics_router
 from app.api.v1.endpoints.events import router as events_router
 from app.api.v1.endpoints.normality import router as normality_router
 from app.api.v1.endpoints.analyses import router as analyses_router
+from app.api.v1.endpoints.findings import router as findings_router
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ app.include_router(metrics_router, prefix="/api/v1")
 app.include_router(events_router, prefix="/api/v1")
 app.include_router(normality_router, prefix="/api/v1")
 app.include_router(analyses_router, prefix="/api/v1")
+app.include_router(findings_router, prefix="/api/v1")
 
 @app.get("/api/v1/health/live", tags=["health"])
 def health_live() -> dict[str, str]:
