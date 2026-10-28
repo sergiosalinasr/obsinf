@@ -1,0 +1,150 @@
+import os
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+from uuid import uuid4
+
+from dotenv import load_dotenv
+from google.adk.agents import LlmAgent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.runners import InMemoryRunner
+from google.genai import types
+
+from app.agents.weblogic_prompt import (
+    PROJECT_ROOT,
+    build_weblogic_message,
+    load_weblogic_instruction,
+)
+from app.analysis.finding_contract import (
+    FindingProposal,
+    validate_finding_context,
+)
+
+
+@dataclass(frozen=True)
+class AgentConfiguration:
+    """Configuración exacta utilizada durante una interpretación."""
+
+    agent_name: str
+    model_name: str
+    instruction: str
+
+
+def load_agent_configuration() -> AgentConfiguration:
+    """Carga el modelo y el prompt usados por esta ejecución."""
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+
+    if not api_key or api_key == "your_openai_api_key_here":
+        raise ValueError(
+            "Configura OPENAI_API_KEY en el .env de OBSINF"
+        )
+
+    model_name = os.getenv(
+        "OPENAI_MODEL", "openai/gpt-5-mini"
+    ).strip()
+
+    if not model_name.startswith("openai/"):
+        raise ValueError(
+            "Para esta prueba OPENAI_MODEL debe comenzar con openai/"
+        )
+
+    return AgentConfiguration(
+        agent_name="weblogic_specialist",
+        model_name=model_name,
+        instruction=load_weblogic_instruction(),
+    )
+
+
+def parse_agent_response(
+    response_text: str,
+    *,
+    resource_key: str,
+    evidence: list[dict[str, Any]],
+) -> FindingProposal:
+    """Valida la estructura y las referencias del hallazgo propuesto."""
+    try:
+        proposal = FindingProposal.model_validate_json(response_text)
+    except ValueError as exc:
+        raise ValueError(
+            "El agente no devolvió un hallazgo JSON válido"
+        ) from exc
+
+    periods = {
+        item["id"]: (
+            datetime.fromisoformat(item["start_at"]),
+            datetime.fromisoformat(item["end_at"]),
+        )
+        for item in evidence
+    }
+
+    validate_finding_context(
+        proposal,
+        expected_resource=resource_key,
+        allowed_evidence_ids=set(periods),
+        evidence_periods=periods,
+    )
+
+    return proposal
+
+
+async def analyze_resource(
+    resource_key: str,
+    evidence: list[dict[str, Any]],
+    configuration: AgentConfiguration,
+) -> FindingProposal:
+    """Invoca al especialista para un recurso y valida su respuesta."""
+    message_text = build_weblogic_message(resource_key, evidence)
+
+    agent = LlmAgent(
+        name=configuration.agent_name,
+        model=LiteLlm(model=configuration.model_name),
+        instruction=configuration.instruction,
+        description=(
+            "Interpreta evidencias deterministas de Oracle WebLogic."
+        ),
+    )
+
+    runner = InMemoryRunner(
+        agent=agent,
+        app_name="obsinf",
+    )
+
+    # Cada interpretación utiliza una sesión temporal independiente.
+    user_id = f"obsinf-local-{uuid4().hex}"
+
+    session = await runner.session_service.create_session(
+        app_name="obsinf",
+        user_id=user_id,
+    )
+
+    message = types.Content(
+        role="user",
+        parts=[types.Part.from_text(text=message_text)],
+    )
+
+    response_text = None
+
+    async for event in runner.run_async(
+        user_id=user_id,
+        session_id=session.id,
+        new_message=message,
+    ):
+        if event.is_final_response() and event.content:
+            parts = event.content.parts or []
+            text_parts = [
+                part.text for part in parts if part.text
+            ]
+
+            if text_parts:
+                response_text = "".join(text_parts)
+
+    if not response_text:
+        raise RuntimeError("El agente no devolvió una respuesta final")
+
+    return parse_agent_response(
+        response_text,
+        resource_key=resource_key,
+        evidence=evidence,
+    )

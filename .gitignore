@@ -1,0 +1,27 @@
+# Entorno y secretos
+.venv/
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Datos y archivos locales
+/data/
+*.log
+
+# Editor y sistema
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+.pytest_tmp/
