@@ -1,0 +1,16 @@
+{"timestamp":"2026-10-27T09:00:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":20,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:00:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":0,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:01:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":22,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:01:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":0,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:02:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":28,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:02:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":3,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:03:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":30,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:03:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":4,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:04:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":25,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:04:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":2,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:05:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":24,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:05:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":0,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:06:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":22,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:06:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":0,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:07:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_active_sessions","value":20,"unit":"count","attributes":{}}
+{"timestamp":"2026-10-27T09:07:00-03:00","resource_key":"ORCLPDB1/ERP_SERVICE","metric_name":"oracle_blocked_sessions","value":0,"unit":"count","attributes":{}}
