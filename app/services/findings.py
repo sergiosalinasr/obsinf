@@ -35,6 +35,7 @@ def save_finding(
     model_name: str,
     instruction: str,
     event_context: EventContext | None = None,
+    expected_technology: str = "weblogic",
 ) -> Finding:
     """Valida y guarda un hallazgo con sus evidencias.
 
@@ -49,6 +50,16 @@ def save_finding(
             raise FindingPersistenceError(
                 "INVALID_CONTEXT",
                 "Los identificadores deben ser positivos",
+            )
+
+        if expected_technology not in {"weblogic", "oracle"}:
+            raise FindingPersistenceError("INVALID_CONTEXT", "Tecnología de interpretación no habilitada")
+        expected_agent_technology = {
+            "weblogic_specialist": "weblogic", "oracle_specialist": "oracle",
+        }.get(agent_name.strip())
+        if expected_agent_technology is not None and expected_agent_technology != expected_technology:
+            raise FindingPersistenceError(
+                "INVALID_AGENT_CONTEXT", "El agente no corresponde a la tecnología de interpretación"
             )
 
         if not agent_name.strip() or not model_name.strip():
@@ -92,14 +103,14 @@ def save_finding(
             .where(
                 Source.company_id == company_id,
                 Source.id == source_id,
-                Technology.code == "weblogic",
+                Technology.code == expected_technology,
             )
         )
 
         if source is None:
             raise FindingPersistenceError(
                 "SOURCE_NOT_FOUND",
-                "Fuente WebLogic no encontrada en la empresa",
+                "Fuente de la tecnología esperada no encontrada en la empresa",
             )
 
         # La validación estructural se hizo al construir FindingProposal.
@@ -143,6 +154,11 @@ def save_finding(
                 "INVALID_PROPOSAL",
                 "El hallazgo no cubre el período de sus evidencias",
             ) from exc
+
+        if expected_technology == "oracle" and event_context is not None:
+            raise FindingPersistenceError(
+                "INVALID_EVENT_CONTEXT", "La interpretación Oracle todavía no admite contexto de eventos"
+            )
 
         # El modelo nunca decide qué eventos están autorizados. Se comprueba
         # otra vez la selección completa contra BD antes de guardar referencias.

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.integrations.capabilities import supports_format, supports_technology
 from app.models.company import Company
 from app.models.ingestion import (
     IngestionBatch,
@@ -198,11 +199,19 @@ def receive_ingestion(
                 source.ingestion_method != "file"
                 or technology is None
                 or not technology.is_active
-                or technology.code != "weblogic"
+                or not supports_technology(technology.code)
             ):
                 raise IngestionServiceError(
                     409, "INGESTION_NOT_SUPPORTED",
                     "La fuente no admite esta carga",
+                )
+
+            # El manifiesto puede ser válido pero incompatible con esta fuente.
+            # La comprobación se hace bajo los mismos bloqueos que el registro.
+            if any(not supports_format(technology.code, item.format) for item in manifest.files):
+                raise IngestionServiceError(
+                    422, "FORMAT_NOT_SUPPORTED_FOR_TECHNOLOGY",
+                    "Un formato del manifiesto no está habilitado para esta tecnología",
                 )
 
             batch = IngestionBatch(

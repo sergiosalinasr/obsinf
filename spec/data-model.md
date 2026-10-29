@@ -62,6 +62,7 @@ Las tablas pertenecientes a una empresa tendrán company_id obligatorio.
 | Regla de normalidad | normality_rules | Detección inicial |
 | Evidencia determinista | evidence | Detección inicial |
 | Métrica de evidencia | evidence_metrics | Detección inicial |
+| Dependencia entre recursos | resource_dependencies | Análisis entre tecnologías |
 
 Las entidades posteriores constituyen el diseño objetivo.
 Sus migraciones se crearán cuando se implemente cada funcionalidad.
@@ -913,3 +914,87 @@ que sustentan cada desviación.
 - Impedir modificaciones de perfiles y reglas publicados.
 - Diferenciar ausencia de configuración, ausencia de datos
   y ausencia de desviaciones.
+
+## 20. Dependencias entre recursos
+
+### resource_dependencies
+
+Registra una relación configurada y dirigida entre un recurso
+consumidor y un recurso proveedor de la misma empresa.
+
+La relación aporta contexto de arquitectura. No demuestra causalidad,
+impacto operativo ni propagación de una anomalía.
+
+| Campo | Tipo | Regla |
+|---|---|---|
+| id | BIGINT IDENTITY | PK |
+| company_id | BIGINT | Obligatorio |
+| consumer_source_id | BIGINT | Fuente consumidora de la misma empresa |
+| consumer_resource_key | TEXT | Identificador exacto del recurso consumidor |
+| provider_source_id | BIGINT | Fuente proveedora de la misma empresa |
+| provider_resource_key | TEXT | Identificador exacto del recurso proveedor |
+| dependency_type | TEXT | uses_database_service en esta etapa |
+| description | TEXT | Obligatorio; explica la relación y su procedencia |
+| configured_by | TEXT | Obligatorio; identidad que registra la configuración |
+| is_active | BOOLEAN | Obligatorio; default true |
+| created_at | TIMESTAMPTZ | Obligatorio; reloj PostgreSQL |
+| updated_at | TIMESTAMPTZ | Obligatorio; reloj PostgreSQL |
+
+Restricciones:
+
+- UNIQUE(company_id, id).
+- UNIQUE(company_id, consumer_source_id, consumer_resource_key,
+  provider_source_id, provider_resource_key, dependency_type).
+- Ambas fuentes deben pertenecer a company_id mediante claves
+  foráneas compuestas hacia sources(company_id, id).
+- Las claves de recurso, description y configured_by no pueden
+  estar vacías.
+- El consumidor y proveedor no pueden ser el mismo recurso
+  de la misma fuente.
+- No se configura borrado en cascada.
+
+Índices:
+
+- La restricción única permite buscar por empresa y consumidor.
+- Índice adicional por empresa, fuente y recurso proveedor.
+
+Alcance inicial:
+
+- La configuración es explícita; no se infiere por nombres,
+  cercanía temporal ni respuestas del LLM.
+- Los resource_key coinciden exactamente con los identificadores
+  utilizados por los adaptadores.
+- No existe todavía un catálogo independiente de recursos.
+  Por ello, PostgreSQL garantiza la pertenencia de las fuentes,
+  pero no la existencia de cada recurso en las observaciones.
+- La relación puede configurarse antes de recibir observaciones.
+- configured_by se obtendrá del contexto autenticado; durante
+  el desarrollo local se utilizará local-dev.
+- Una relación desactivada se conserva y puede reactivarse.
+- Esta etapa representa configuración vigente; no incluye
+  intervalos históricos de validez ni detección de ciclos.
+- No se utilizará la fecha de creación como fecha de inicio
+  real de la dependencia.
+
+Trazabilidad del análisis conjunto:
+
+Cuando se implemente la correlación, cada resultado conservará
+una copia de la dependencia utilizada y su procedencia.
+Modificar la configuración no reinterpretará resultados guardados.
+
+Para períodos anteriores a su registro, la dependencia solo
+se utilizará como configuración declarada para ese análisis,
+sin afirmar que su vigencia histórica fue comprobada.
+
+Ejemplo de demostración:
+
+- Empresa: 1.
+- Consumidor: fuente 2, recurso ManagedServer1.
+- Proveedor: fuente 4, recurso ORCLPDB1/ERP_SERVICE.
+- Tipo: uses_database_service.
+- Descripción: relación configurada para la demostración;
+  no verificada contra una configuración real de datasource.
+
+Esta declaración no permite atribuir las métricas JDBC
+del servidor a un datasource específico ni concluir que
+el bloqueo Oracle causó las desviaciones WebLogic.

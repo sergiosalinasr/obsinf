@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.integrations.capabilities import supports_technology
 from app.models.company import Company
 from app.models.source import Source
 from app.models.technology import Technology
@@ -59,13 +60,12 @@ def create_source(
                 409, "TECHNOLOGY_INACTIVE", "La tecnología está inactiva"
             )
 
-        # Solo habilitamos el registro de fuentes WebLogic en esta etapa.
-        # Esto no habilita todavía la carga ni el procesamiento de archivos.
-        if technology.code != "weblogic":
+        # El catálogo y las capacidades implementadas son conceptos separados.
+        if not supports_technology(technology.code):
             raise SourceRegistrationError(
                 409,
                 "TECHNOLOGY_NOT_SUPPORTED",
-                "El registro de fuentes solo está habilitado para WebLogic",
+                "El registro de fuentes está habilitado para WebLogic y Oracle",
             )
 
         source = Source(

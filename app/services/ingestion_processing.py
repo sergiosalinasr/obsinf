@@ -8,7 +8,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.integrations.weblogic.metrics_jsonl import (
+from app.integrations.capabilities import supports_format, supports_metric, supports_technology
+from app.integrations.common.metrics_jsonl import (
     PARSER_VERSION as METRICS_PARSER_VERSION,
     ParseError,
     parse_metrics_jsonl,
@@ -25,7 +26,6 @@ from app.models.ingestion import (
     IngestionError,
     IngestionFile,
 )
-from app.models.observations import MetricNormalized
 from app.models.source import Source
 from app.models.technology import Technology
 
@@ -109,7 +109,7 @@ def claim_batch(db: Session, company_id: int, batch_id: int) -> str:
             or source.ingestion_method != "file"
             or technology is None
             or not technology.is_active
-            or technology.code != "weblogic"
+            or not supports_technology(technology.code)
         ):
             raise ProcessingError("La empresa o fuente no está habilitada")
 
@@ -144,8 +144,14 @@ def claim_batch(db: Session, company_id: int, batch_id: int) -> str:
         db.rollback()
         raise
 
-def normalized_records(original, file, format_name):
-    """Entrega errores o valores listos para insertar según el formato."""
+def normalized_records(original, file, format_name, technology_code="weblogic"):
+    """Entrega errores o valores listos para insertar según la tecnología.
+
+    El valor predeterminado conserva llamadas anteriores del helper. El
+    procesador siempre envía la tecnología obtenida de la fuente autorizada.
+    """
+    if not supports_format(technology_code, format_name):
+        raise ProcessingError("Formato no habilitado para la tecnología de la fuente")
     if format_name == "obsinf_metrics_jsonl_v1":
         for result in parse_metrics_jsonl(original):
             if isinstance(result, ParseError):
@@ -153,6 +159,13 @@ def normalized_records(original, file, format_name):
                 continue
 
             metric = result.metric
+            if not supports_metric(technology_code, metric.metric_name):
+                yield ParseError(
+                    result.line_number,
+                    "METRIC_NOT_SUPPORTED_FOR_TECHNOLOGY",
+                    "La métrica no está habilitada para la tecnología de la fuente",
+                )
+                continue
 
             yield (
                 MetricNormalized,
@@ -238,6 +251,13 @@ def process_batch(
             for item in manifest_files
         }
 
+        source = db.scalar(select(Source).where(
+            Source.id == batch.source_id, Source.company_id == company_id
+        ))
+        technology = db.get(Technology, source.technology_id) if source is not None else None
+        if technology is None or not supports_technology(technology.code):
+            raise ProcessingError("La tecnología de la fuente no está habilitada")
+
         root = get_settings().data_dir
         read = accepted = rejected = duplicates = 0
 
@@ -247,8 +267,11 @@ def process_batch(
             "weblogic_log_v1": LOG_PARSER_VERSION,
         }
 
-        if any(format_name not in versions for format_name in formats.values()):
-            raise ProcessingError("Formato de archivo no soportado")
+        if any(
+            format_name not in versions or not supports_format(technology.code, format_name)
+            for format_name in formats.values()
+        ):
+            raise ProcessingError("Formato no habilitado para la tecnología de la fuente")
 
         batch.parser_version = ";".join(
             sorted({versions[format_name] for format_name in formats.values()})
@@ -277,7 +300,7 @@ def process_batch(
 
             with path.open("r", encoding="utf-8-sig") as original:
                 for result in normalized_records(
-                    original, file, format_name
+                    original, file, format_name, technology_code=technology.code
                 ):
                     is_error = isinstance(
                         result, (ParseError, LogParseError)
