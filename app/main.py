@@ -1,26 +1,31 @@
+"""Aplicación FastAPI de OBSINF."""
+
 import logging
 from tempfile import TemporaryFile
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+
+from app.api.v1.endpoints.analyses import router as analyses_router
 from app.api.v1.endpoints.companies import router as companies_router
-
-from app.core.config import get_settings
-from app.db.session import engine
-from app.api.v1.endpoints.technologies import router as technologies_router
-from app.api.v1.endpoints.sources import router as sources_router
-
-from app.api.v1.endpoints.ingestions import router as ingestions_router
+from app.api.v1.endpoints.events import router as events_router
+from app.api.v1.endpoints.findings import router as findings_router
 from app.api.v1.endpoints.ingestions import (
     query_router as ingestion_query_router,
 )
-
+from app.api.v1.endpoints.ingestions import router as ingestions_router
 from app.api.v1.endpoints.metrics import router as metrics_router
-from app.api.v1.endpoints.events import router as events_router
 from app.api.v1.endpoints.normality import router as normality_router
-from app.api.v1.endpoints.analyses import router as analyses_router
-from app.api.v1.endpoints.findings import router as findings_router
+from app.api.v1.endpoints.resource_dependencies import (
+    router as dependencies_router,
+)
+from app.api.v1.endpoints.sources import router as sources_router
+from app.api.v1.endpoints.technologies import router as technologies_router
+from app.api.v1.endpoints.correlations import router as correlations_router
+from app.core.config import get_settings
+from app.db.session import engine
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,9 @@ app.include_router(events_router, prefix="/api/v1")
 app.include_router(normality_router, prefix="/api/v1")
 app.include_router(analyses_router, prefix="/api/v1")
 app.include_router(findings_router, prefix="/api/v1")
+app.include_router(dependencies_router, prefix="/api/v1")
+app.include_router(correlations_router, prefix="/api/v1")
+
 
 @app.get("/api/v1/health/live", tags=["health"])
 def health_live() -> dict[str, str]:
@@ -71,7 +79,9 @@ def health_ready() -> dict[str, str]:
             probe.seek(0)
 
             if probe.read() != b"obsinf":
-                raise OSError("Falló la verificación del almacenamiento")
+                raise OSError(
+                    "Falló la verificación del almacenamiento"
+                )
 
     except OSError:
         logger.error("Falló la comprobación del almacenamiento")

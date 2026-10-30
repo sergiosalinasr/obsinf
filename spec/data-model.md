@@ -63,6 +63,7 @@ Las tablas pertenecientes a una empresa tendrán company_id obligatorio.
 | Evidencia determinista | evidence | Detección inicial |
 | Métrica de evidencia | evidence_metrics | Detección inicial |
 | Dependencia entre recursos | resource_dependencies | Análisis entre tecnologías |
+| Correlación entre hallazgos | correlations | Análisis entre tecnologías |
 
 Las entidades posteriores constituyen el diseño objetivo.
 Sus migraciones se crearán cuando se implemente cada funcionalidad.
@@ -998,3 +999,116 @@ Ejemplo de demostración:
 Esta declaración no permite atribuir las métricas JDBC
 del servidor a un datasource específico ni concluir que
 el bloqueo Oracle causó las desviaciones WebLogic.
+
+## 21. Coordinador y correlaciones
+
+### correlations
+
+Conserva la interpretación conjunta de dos hallazgos vinculados
+por una dependencia configurada entre recursos.
+
+La primera implementación admite WebLogic como consumidor
+y Oracle como proveedor de un servicio de base de datos.
+
+Una correlación no modifica los hallazgos originales.
+
+| Campo | Tipo | Regla |
+|---|---|---|
+| id | BIGINT IDENTITY | PK |
+| company_id | BIGINT | Obligatorio |
+| dependency_id | BIGINT | Dependencia de la misma empresa |
+| consumer_finding_id | BIGINT | Hallazgo consumidor de la misma empresa |
+| provider_finding_id | BIGINT | Hallazgo proveedor de la misma empresa |
+| proposal | JSONB | Respuesta validada del coordinador |
+| context_snapshot | JSONB | Copia del contexto enviado al coordinador |
+| agent_name | TEXT | Obligatorio |
+| model_name | TEXT | Obligatorio |
+| prompt_sha256 | TEXT | SHA-256 de la instrucción exacta |
+| context_sha256 | TEXT | SHA-256 del contexto canónico |
+| request_sha256 | TEXT | SHA-256 de la identidad de interpretación |
+| created_at | TIMESTAMPTZ | Obligatorio; reloj PostgreSQL |
+
+Restricciones:
+
+- UNIQUE(company_id, id).
+- UNIQUE(company_id, request_sha256).
+- Claves foráneas compuestas hacia la dependencia y ambos hallazgos.
+- Los dos hallazgos deben ser diferentes.
+- proposal y context_snapshot deben ser objetos JSON.
+- Agente y modelo no pueden estar vacíos.
+- Los tres hashes deben tener 64 caracteres.
+- No se configura borrado en cascada.
+
+El servicio valida adicionalmente:
+
+- Correspondencia entre los hallazgos y los extremos de la dependencia.
+- Pertenencia de evidencias y eventos al contexto autorizado.
+- Estado y períodos de las ejecuciones.
+- Coincidencias entre ventanas de evidencias individuales.
+- Igualdad del contexto seleccionado antes y después de llamar al modelo.
+
+### Contrato de la propuesta
+
+proposal conserva:
+
+- dependency_id.
+- finding_ids: los dos hallazgos seleccionados.
+- evidence_ids: todas sus evidencias seleccionadas.
+- event_ids: eventos citados por el coordinador.
+- assessment: TEMPORAL_COINCIDENCE o NO_TEMPORAL_COINCIDENCE.
+- causality: NOT_ESTABLISHED en esta etapa.
+- confidence: estimación declarada, no probabilidad calibrada.
+- summary: síntesis interpretativa.
+- evidence_overlaps: parejas de evidencias temporalmente coincidentes.
+- limitations: limitaciones de la interpretación.
+
+Los intervalos se comparan entre evidencias individuales.
+La ventana completa de un hallazgo no prueba continuidad.
+
+Una coincidencia temporal y una dependencia configurada
+no demuestran causalidad.
+
+### Contexto conservado
+
+context_snapshot contiene la dependencia, fuentes, hallazgos,
+evidencias, contexto original de eventos, ejecuciones,
+cobertura y cortes de recepción utilizados.
+
+Cada ejecución conserva su propio data_cutoff_at.
+No se asigna artificialmente un corte común.
+
+La copia conserva el contexto histórico: cambios posteriores
+en la configuración no actualizan las correlaciones guardadas.
+
+### Identidad y duplicados
+
+request_sha256 identifica la combinación de:
+
+- Hash del contexto canónico.
+- Hash del prompt exacto.
+- Agente.
+- Modelo.
+
+No se permite guardar otra respuesta para la misma combinación.
+Un contexto, prompt o modelo diferente permite otra interpretación.
+
+Los hashes permiten comprobar identidad; no son firmas digitales
+ni garantizan que la interpretación sea correcta.
+
+### Consultas
+
+- GET /api/v1/companies/{company_id}/correlations.
+- GET /api/v1/companies/{company_id}/correlations/{correlation_id}.
+
+El listado permite filtrar por dependency_id y pagina por ID ascendente.
+El detalle incluye context_snapshot.
+
+Las consultas siempre se limitan a la empresa solicitada.
+Un ID perteneciente a otra empresa se presenta como no encontrado.
+
+Las correlaciones se conservan como resultados históricos.
+Estas APIs no permiten editarlas ni eliminarlas.
+
+Índice adicional:
+
+- correlations(company_id, dependency_id).

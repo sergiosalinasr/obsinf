@@ -17,6 +17,7 @@ from app.models.observations import EventNormalized, MetricNormalized
 from app.models.resource_dependency import ResourceDependency
 from app.models.source import Source
 from app.models.technology import Technology
+from app.models.correlation import Correlation
 
 __all__ = [
     "Company",
@@ -36,4 +37,5 @@ __all__ = [
     "Finding",
     "FindingEvidence",
     "FindingEvent",
+    "Correlation",
 ]
