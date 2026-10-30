@@ -18,6 +18,7 @@ from app.models.resource_dependency import ResourceDependency
 from app.models.source import Source
 from app.models.technology import Technology
 from app.models.correlation import Correlation
+from app.models.report import Report
 
 __all__ = [
     "Company",
@@ -38,4 +39,5 @@ __all__ = [
     "FindingEvidence",
     "FindingEvent",
     "Correlation",
+    "Report",
 ]

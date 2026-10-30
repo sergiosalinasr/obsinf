@@ -521,6 +521,20 @@ Para reportes programados:
 El reporte conservará una copia de la cobertura y del contenido
 publicado, para que su interpretación no dependa de cambios futuros.
 
+Consultas implementadas:
+
+- GET /api/v1/companies/{company_id}/reports:
+  metadatos, paginados por after_id y limit.
+- GET /api/v1/companies/{company_id}/reports/{report_id}:
+  metadatos y contenido Markdown.
+- GET /api/v1/companies/{company_id}/reports/{report_id}/markdown:
+  descarga del contenido almacenado en UTF-8.
+
+Las consultas no regeneran contenido ni invocan al LLM.
+Permiten consultar históricos de empresas desactivadas.
+Los reportes de otras empresas se presentan como no encontrados.
+La copia de selección no se expone en estas respuestas.
+
 ### report_findings
 
 Relaciona reportes y hallazgos.

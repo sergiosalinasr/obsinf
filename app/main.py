@@ -23,6 +23,8 @@ from app.api.v1.endpoints.resource_dependencies import (
 from app.api.v1.endpoints.sources import router as sources_router
 from app.api.v1.endpoints.technologies import router as technologies_router
 from app.api.v1.endpoints.correlations import router as correlations_router
+from app.api.v1.endpoints.reports import router as reports_router
+
 from app.core.config import get_settings
 from app.db.session import engine
 
@@ -47,7 +49,7 @@ app.include_router(analyses_router, prefix="/api/v1")
 app.include_router(findings_router, prefix="/api/v1")
 app.include_router(dependencies_router, prefix="/api/v1")
 app.include_router(correlations_router, prefix="/api/v1")
-
+app.include_router(reports_router, prefix="/api/v1")
 
 @app.get("/api/v1/health/live", tags=["health"])
 def health_live() -> dict[str, str]:
